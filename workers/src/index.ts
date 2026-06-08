@@ -125,6 +125,9 @@ async function getPrivateJwk(env: Env): Promise<JwkWithKid> {
 async function publicJwk(env: Env): Promise<JwkWithKid> {
   const jwk = { ...(await getPrivateJwk(env)) } as JwkWithKid;
   delete jwk.d; delete jwk.p; delete jwk.q; delete jwk.dp; delete jwk.dq; delete jwk.qi;
+  // Keep JWKS public keys minimal for strict OIDC validators.
+  delete jwk.key_ops;
+  delete jwk.ext;
   jwk.use = "sig"; jwk.alg = "RS256"; jwk.kid = jwk.kid || "main";
   return jwk;
 }
