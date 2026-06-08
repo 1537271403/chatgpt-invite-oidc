@@ -21,11 +21,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 @dataclass
 class Settings:
-    issuer: str = os.getenv("OIDC_ISSUER", "https://oidc.acidtech.asia").rstrip("/")
+    issuer: str = os.getenv("OIDC_ISSUER", "https://oidc.example.com").rstrip("/")
     client_id: str = os.getenv("OIDC_CLIENT_ID", "chatgpt-sso")
     client_secret: str = os.getenv("OIDC_CLIENT_SECRET", "")
     invite_code: str = os.getenv("INVITE_CODE", "")
-    allowed_email_domain: str = os.getenv("ALLOWED_EMAIL_DOMAIN", "acidtech.asia").lower().lstrip("@")
+    allowed_email_domain: str = os.getenv("ALLOWED_EMAIL_DOMAIN", "example.com").lower().lstrip("@")
     allowed_redirect_uris: list[str] = None  # type: ignore[assignment]
     code_ttl_seconds: int = int(os.getenv("CODE_TTL_SECONDS", "300"))
     token_ttl_seconds: int = int(os.getenv("TOKEN_TTL_SECONDS", "3600"))
@@ -132,7 +132,7 @@ def make_claims(email: str) -> dict:
         "email": email,
         "email_verified": True,
         "given_name": local,
-        "family_name": "AcidTech",
+        "family_name": "Example",
         "name": local,
         "preferred_username": local,
     }

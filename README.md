@@ -11,11 +11,11 @@ The service validates both and returns OIDC claims based on the email:
 
 ```json
 {
-  "sub": "alice@acidtech.asia",
-  "email": "alice@acidtech.asia",
+  "sub": "alice@example.com",
+  "email": "alice@example.com",
   "email_verified": true,
   "given_name": "alice",
-  "family_name": "AcidTech"
+  "family_name": "Example"
 }
 ```
 
@@ -48,12 +48,12 @@ curl http://127.0.0.1:8090/healthz
 ## Required `.env`
 
 ```env
-OIDC_ISSUER=https://oidc.acidtech.asia
+OIDC_ISSUER=https://oidc.example.com
 OIDC_CLIENT_ID=chatgpt-sso
 OIDC_CLIENT_SECRET=replace-with-a-long-random-secret
 ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
 INVITE_CODE=replace-with-a-long-random-invite-code
-ALLOWED_EMAIL_DOMAIN=acidtech.asia
+ALLOWED_EMAIL_DOMAIN=example.com
 HOST_PORT=8090
 ```
 
@@ -70,16 +70,16 @@ Example config is in `nginx.example.conf`.
 Typical setup:
 
 ```bash
-cp nginx.example.conf /etc/nginx/conf.d/oidc.acidtech.asia.conf
-certbot certonly --nginx -d oidc.acidtech.asia
+cp nginx.example.conf /etc/nginx/conf.d/oidc.example.com.conf
+certbot certonly --nginx -d oidc.example.com
 nginx -t && systemctl reload nginx
 ```
 
 Verify externally:
 
 ```bash
-curl https://oidc.acidtech.asia/.well-known/openid-configuration
-curl https://oidc.acidtech.asia/jwks
+curl https://oidc.example.com/.well-known/openid-configuration
+curl https://oidc.example.com/jwks
 ```
 
 ## OpenAI / ChatGPT SSO config
@@ -89,7 +89,7 @@ Use:
 ```text
 Client ID: chatgpt-sso
 Client Secret: value of OIDC_CLIENT_SECRET
-Discovery Endpoint: https://oidc.acidtech.asia/.well-known/openid-configuration
+Discovery Endpoint: https://oidc.example.com/.well-known/openid-configuration
 Scopes: openid email profile
 ```
 

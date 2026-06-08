@@ -37,7 +37,7 @@ def test_authorize_rejects_bad_invite_code():
             "scope": "openid email profile",
             "state": "abc",
             "nonce": "nonce",
-            "email": "alice@acidtech.asia",
+            "email": "alice@example.com",
             "invite_code": "wrong",
         },
     )
@@ -55,12 +55,12 @@ def test_authorize_rejects_wrong_email_domain():
             "scope": "openid email profile",
             "state": "abc",
             "nonce": "nonce",
-            "email": "alice@example.com",
+            "email": "alice@invalid.test",
             "invite_code": settings.invite_code,
         },
     )
     assert r.status_code == 400
-    assert "@acidtech.asia" in r.text
+    assert "@example.com" in r.text
 
 
 def test_authorize_issues_code_and_token_contains_required_claims():
@@ -73,7 +73,7 @@ def test_authorize_issues_code_and_token_contains_required_claims():
             "scope": "openid email profile",
             "state": "state-123",
             "nonce": "nonce-123",
-            "email": "alice.smith@acidtech.asia",
+            "email": "alice.smith@example.com",
             "invite_code": settings.invite_code,
         },
         follow_redirects=False,
@@ -103,11 +103,11 @@ def test_authorize_issues_code_and_token_contains_required_claims():
     userinfo = client.get("/userinfo", headers={"Authorization": f"Bearer {body['access_token']}"})
     assert userinfo.status_code == 200
     claims = userinfo.json()
-    assert claims["sub"] == "alice.smith@acidtech.asia"
-    assert claims["email"] == "alice.smith@acidtech.asia"
+    assert claims["sub"] == "alice.smith@example.com"
+    assert claims["email"] == "alice.smith@example.com"
     assert claims["email_verified"] is True
     assert claims["given_name"] == "alice.smith"
-    assert claims["family_name"] == "AcidTech"
+    assert claims["family_name"] == "Example"
 
 
 def test_code_is_single_use():
@@ -119,7 +119,7 @@ def test_code_is_single_use():
             "response_type": "code",
             "scope": "openid email profile",
             "state": "state",
-            "email": "bob@acidtech.asia",
+            "email": "bob@example.com",
             "invite_code": settings.invite_code,
         },
         follow_redirects=False,
