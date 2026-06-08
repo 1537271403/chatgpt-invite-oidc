@@ -3,7 +3,7 @@ export interface Env {
   OIDC_ISSUER: string;
   OIDC_CLIENT_ID: string;
   OIDC_CLIENT_SECRET: string;
-  OIDC_PRIVATE_JWK: string;
+  OIDC_PRIVATE_JWK?: string;
   INVITE_CODE: string;
   ALLOWED_REDIRECT_URIS: string;
   ALLOWED_EMAIL_DOMAIN: string;
@@ -30,7 +30,7 @@ function config(env: Env) {
     issuer: required(env.OIDC_ISSUER, "OIDC_ISSUER").replace(/\/$/, ""),
     clientId: required(env.OIDC_CLIENT_ID, "OIDC_CLIENT_ID"),
     clientSecret: required(env.OIDC_CLIENT_SECRET, "OIDC_CLIENT_SECRET"),
-    privateJwk: required(env.OIDC_PRIVATE_JWK, "OIDC_PRIVATE_JWK"),
+    privateJwk: env.OIDC_PRIVATE_JWK || "",
     inviteCode: required(env.INVITE_CODE, "INVITE_CODE"),
     redirects: required(env.ALLOWED_REDIRECT_URIS, "ALLOWED_REDIRECT_URIS").split(",").map((x) => x.trim()).filter(Boolean),
     domain: required(env.ALLOWED_EMAIL_DOMAIN, "ALLOWED_EMAIL_DOMAIN").toLowerCase().replace(/^@/, ""),
@@ -96,14 +96,40 @@ function loginPage(env: Env, params: Record<string, string>, error = ""): Respon
 }
 type JwkWithKid = JsonWebKey & { kid?: string };
 
-function publicJwk(env: Env): JwkWithKid {
-  const jwk = JSON.parse(config(env).privateJwk) as JwkWithKid;
+async function generatePrivateJwk(): Promise<JwkWithKid> {
+  const keyPair = await crypto.subtle.generateKey(
+    { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    true,
+    ["sign", "verify"],
+  );
+  const jwk = await crypto.subtle.exportKey("jwk", keyPair.privateKey) as JwkWithKid;
+  jwk.kid = jwk.kid || "main";
+  jwk.alg = "RS256";
+  jwk.key_ops = ["sign"];
+  jwk.ext = true;
+  return jwk;
+}
+
+async function getPrivateJwk(env: Env): Promise<JwkWithKid> {
+  const configured = config(env).privateJwk;
+  if (configured) return JSON.parse(configured) as JwkWithKid;
+  const key = "config:oidc_private_jwk";
+  const existing = await env.OIDC_KV.get(key);
+  if (existing) return JSON.parse(existing) as JwkWithKid;
+  const jwk = await generatePrivateJwk();
+  // Persist the generated signing key so /jwks and issued tokens remain stable across deploys.
+  await env.OIDC_KV.put(key, JSON.stringify(jwk));
+  return jwk;
+}
+
+async function publicJwk(env: Env): Promise<JwkWithKid> {
+  const jwk = { ...(await getPrivateJwk(env)) } as JwkWithKid;
   delete jwk.d; delete jwk.p; delete jwk.q; delete jwk.dp; delete jwk.dq; delete jwk.qi;
   jwk.use = "sig"; jwk.alg = "RS256"; jwk.kid = jwk.kid || "main";
   return jwk;
 }
 async function signJwt(env: Env, payload: Record<string, unknown>): Promise<string> {
-  const privateJwk = JSON.parse(config(env).privateJwk) as JwkWithKid;
+  const privateJwk = await getPrivateJwk(env);
   privateJwk.alg = "RS256"; privateJwk.key_ops = ["sign"]; privateJwk.ext = true;
   const key = await crypto.subtle.importKey("jwk", privateJwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
   const header = { alg: "RS256", typ: "JWT", kid: privateJwk.kid || "main" };
@@ -129,7 +155,7 @@ export default {
         const c = config(env);
         return json({ issuer: c.issuer, authorization_endpoint: `${c.issuer}/authorize`, token_endpoint: `${c.issuer}/token`, userinfo_endpoint: `${c.issuer}/userinfo`, jwks_uri: `${c.issuer}/jwks`, response_types_supported: ["code"], subject_types_supported: ["public"], id_token_signing_alg_values_supported: ["RS256"], scopes_supported: ["openid", "email", "profile"], claims_supported: ["sub", "email", "email_verified", "given_name", "family_name", "name", "preferred_username"], token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"] });
       }
-      if (url.pathname === "/jwks") return json({ keys: [publicJwk(env)] });
+      if (url.pathname === "/jwks") return json({ keys: [await publicJwk(env)] });
       if (url.pathname === "/authorize" && request.method === "GET") {
         const params: Record<string, string> = {};
         url.searchParams.forEach((value, key) => { params[key] = value; });

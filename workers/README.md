@@ -34,7 +34,6 @@ Generate values:
 ```bash
 openssl rand -hex 32 # OIDC_CLIENT_SECRET
 openssl rand -hex 32 # INVITE_CODE
-node -e 'crypto.subtle.generateKey({name:"RSASSA-PKCS1-v1_5",modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:"SHA-256"},true,["sign","verify"]).then(k=>crypto.subtle.exportKey("jwk",k.privateKey)).then(j=>{j.kid="main"; console.log(JSON.stringify(j))})'
 ```
 
 Set them:
@@ -42,10 +41,7 @@ Set them:
 ```bash
 npx wrangler secret put OIDC_CLIENT_SECRET
 npx wrangler secret put INVITE_CODE
-npx wrangler secret put OIDC_PRIVATE_JWK
-```
-
-Paste the private JWK JSON when setting `OIDC_PRIVATE_JWK`.
+npx wrangler secret put ```
 
 ## 4. Deploy
 
@@ -84,7 +80,6 @@ CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
 OIDC_CLIENT_SECRET
 INVITE_CODE
-OIDC_PRIVATE_JWK
 ```
 
 Required GitHub **Variables**:
@@ -115,7 +110,6 @@ The GitHub Action automatically creates or reuses the Workers KV namespace by ti
 Generate `OIDC_PRIVATE_JWK` locally once and save the full JSON as a GitHub Secret:
 
 ```bash
-node -e 'crypto.subtle.generateKey({name:"RSASSA-PKCS1-v1_5",modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:"SHA-256"},true,["sign","verify"]).then(k=>crypto.subtle.exportKey("jwk",k.privateKey)).then(j=>{j.kid="main"; console.log(JSON.stringify(j))})'
 ```
 
 Every push to `main` that changes `workers/**` deploys automatically. You can also run the workflow manually from GitHub Actions.

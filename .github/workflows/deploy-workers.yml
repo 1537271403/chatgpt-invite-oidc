@@ -123,10 +123,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
           INVITE_CODE: ${{ secrets.INVITE_CODE }}
-          OIDC_PRIVATE_JWK: ${{ secrets.OIDC_PRIVATE_JWK }}
         run: |
           set -euo pipefail
-          for name in OIDC_CLIENT_SECRET INVITE_CODE OIDC_PRIVATE_JWK; do
+          for name in OIDC_CLIENT_SECRET INVITE_CODE; do
             if [ -z "${!name:-}" ]; then
               echo "Missing required GitHub secret: $name" >&2
               exit 1
@@ -134,4 +133,3 @@ jobs:
           done
           printf '%s' "$OIDC_CLIENT_SECRET" | npx wrangler secret put OIDC_CLIENT_SECRET --config wrangler.toml
           printf '%s' "$INVITE_CODE" | npx wrangler secret put INVITE_CODE --config wrangler.toml
-          printf '%s' "$OIDC_PRIVATE_JWK" | npx wrangler secret put OIDC_PRIVATE_JWK --config wrangler.toml
