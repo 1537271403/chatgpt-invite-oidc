@@ -105,11 +105,6 @@ RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_MAX_ATTEMPTS=10
 ```
 
-The GitHub Action automatically creates or reuses the Workers KV namespace by title, so you do **not** need to create KV manually. It also writes Worker runtime secrets from GitHub Secrets on every deploy, so first-time deployment can be fully completed from Actions.
-
-Generate `OIDC_PRIVATE_JWK` locally once and save the full JSON as a GitHub Secret:
-
-```bash
-```
+The GitHub Action automatically creates or reuses the Workers KV namespace by title, so you do **not** need to create KV manually. It also writes Worker runtime secrets from GitHub Secrets on every deploy. The Worker signing key is generated automatically on first use and persisted in KV, so you do **not** need to provide `OIDC_PRIVATE_JWK`.
 
 Every push to `main` that changes `workers/**` deploys automatically. You can also run the workflow manually from GitHub Actions.
