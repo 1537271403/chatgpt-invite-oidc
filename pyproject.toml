@@ -1,0 +1,16 @@
+[project]
+name = "chatgpt-invite-oidc"
+version = "0.1.0"
+description = "Minimal invite-code OIDC provider for ChatGPT SSO"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "pyjwt[crypto]",
+  "cryptography",
+  "python-multipart",
+  "jinja2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
