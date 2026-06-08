@@ -1,5 +1,14 @@
 from urllib.parse import parse_qs, urlparse
 
+import os
+
+os.environ.setdefault("OIDC_CLIENT_SECRET", "test-client-secret")
+os.environ.setdefault("INVITE_CODE", "test-invite-code")
+os.environ.setdefault(
+    "ALLOWED_REDIRECT_URIS",
+    "https://external.auth.openai.com/sso/oidc/test-connection/callback",
+)
+
 from fastapi.testclient import TestClient
 
 from app.main import app, settings

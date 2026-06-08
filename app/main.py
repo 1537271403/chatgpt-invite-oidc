@@ -23,8 +23,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 class Settings:
     issuer: str = os.getenv("OIDC_ISSUER", "https://oidc.acidtech.asia").rstrip("/")
     client_id: str = os.getenv("OIDC_CLIENT_ID", "chatgpt-sso")
-    client_secret: str = os.getenv("OIDC_CLIENT_SECRET", "change-me-client-secret")
-    invite_code: str = os.getenv("INVITE_CODE", "ACIDTECH-ChatGPT-SSO-2026-8vQmR7xL2pN9sK4dH6")
+    client_secret: str = os.getenv("OIDC_CLIENT_SECRET", "")
+    invite_code: str = os.getenv("INVITE_CODE", "")
     allowed_email_domain: str = os.getenv("ALLOWED_EMAIL_DOMAIN", "acidtech.asia").lower().lstrip("@")
     allowed_redirect_uris: list[str] = None  # type: ignore[assignment]
     code_ttl_seconds: int = int(os.getenv("CODE_TTL_SECONDS", "300"))
@@ -34,11 +34,17 @@ class Settings:
     data_dir: Path = Path(os.getenv("DATA_DIR", "/data"))
 
     def __post_init__(self):
-        redirects = os.getenv(
-            "ALLOWED_REDIRECT_URIS",
-            "https://external.auth.openai.com/sso/oidc/FguS4oYxohrP1trYmsrzQynoa/callback",
-        )
+        redirects = os.getenv("ALLOWED_REDIRECT_URIS", "")
         self.allowed_redirect_uris = [x.strip() for x in redirects.split(",") if x.strip()]
+        missing = []
+        if not self.client_secret:
+            missing.append("OIDC_CLIENT_SECRET")
+        if not self.invite_code:
+            missing.append("INVITE_CODE")
+        if not self.allowed_redirect_uris:
+            missing.append("ALLOWED_REDIRECT_URIS")
+        if missing:
+            raise RuntimeError("Missing required environment variable(s): " + ", ".join(missing))
 
 
 settings = Settings()
