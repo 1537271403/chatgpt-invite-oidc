@@ -1,0 +1,63 @@
+name: Deploy Cloudflare Workers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "workers/**"
+      - ".github/workflows/deploy-workers.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workers/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Write wrangler.toml
+        run: |
+          cat > wrangler.toml <<'TOML'
+          name = "${{ vars.CF_WORKER_NAME || 'chatgpt-invite-oidc' }}"
+          main = "src/index.ts"
+          compatibility_date = "2025-01-01"
+
+          [vars]
+          OIDC_ISSUER = "${{ vars.OIDC_ISSUER }}"
+          OIDC_CLIENT_ID = "${{ vars.OIDC_CLIENT_ID || 'chatgpt-sso' }}"
+          ALLOWED_REDIRECT_URIS = "${{ vars.ALLOWED_REDIRECT_URIS }}"
+          ALLOWED_EMAIL_DOMAIN = "${{ vars.ALLOWED_EMAIL_DOMAIN }}"
+          TOKEN_TTL_SECONDS = "${{ vars.TOKEN_TTL_SECONDS || '3600' }}"
+          CODE_TTL_SECONDS = "${{ vars.CODE_TTL_SECONDS || '300' }}"
+          RATE_LIMIT_WINDOW_SECONDS = "${{ vars.RATE_LIMIT_WINDOW_SECONDS || '60' }}"
+          RATE_LIMIT_MAX_ATTEMPTS = "${{ vars.RATE_LIMIT_MAX_ATTEMPTS || '10' }}"
+          FAMILY_NAME = "${{ vars.FAMILY_NAME || 'Example' }}"
+
+          [[kv_namespaces]]
+          binding = "OIDC_KV"
+          id = "${{ vars.CF_KV_NAMESPACE_ID }}"
+          TOML
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers
+          command: deploy

@@ -72,3 +72,46 @@ Scopes: openid email profile
 ```
 
 OpenAI's callback URL must match `ALLOWED_REDIRECT_URIS` exactly.
+
+## GitHub Actions deploy
+
+This repo also includes `.github/workflows/deploy-workers.yml`.
+
+Required GitHub **Secrets**:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+Required GitHub **Variables**:
+
+```text
+CF_WORKER_NAME=chatgpt-invite-oidc
+CF_KV_NAMESPACE_ID=your-workers-kv-namespace-id
+OIDC_ISSUER=https://sso.example.com
+OIDC_CLIENT_ID=chatgpt-sso
+ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
+ALLOWED_EMAIL_DOMAIN=example.com
+FAMILY_NAME=Example
+```
+
+Optional GitHub **Variables**:
+
+```text
+TOKEN_TTL_SECONDS=3600
+CODE_TTL_SECONDS=300
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_MAX_ATTEMPTS=10
+```
+
+Worker runtime secrets still need to be set once with Wrangler, because GitHub Actions does not write them by default:
+
+```bash
+cd workers
+npx wrangler secret put OIDC_CLIENT_SECRET
+npx wrangler secret put INVITE_CODE
+npx wrangler secret put OIDC_PRIVATE_JWK
+```
+
+After that, every push to `main` that changes `workers/**` deploys automatically. You can also run the workflow manually from GitHub Actions.
