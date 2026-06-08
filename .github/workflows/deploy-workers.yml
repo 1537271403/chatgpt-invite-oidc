@@ -31,6 +31,61 @@ jobs:
       - name: Type check
         run: npm run check
 
+      - name: Create or reuse KV namespace
+        id: kv
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_KV_NAMESPACE_TITLE: ${{ vars.CF_KV_NAMESPACE_TITLE || 'chatgpt-invite-oidc-kv' }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+
+          token = os.environ["CLOUDFLARE_API_TOKEN"]
+          account_id = os.environ["CLOUDFLARE_ACCOUNT_ID"]
+          title = os.environ.get("CF_KV_NAMESPACE_TITLE") or "chatgpt-invite-oidc-kv"
+          base = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/storage/kv/namespaces"
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Content-Type": "application/json",
+          }
+
+          def request(method, url, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as r:
+                  payload = json.load(r)
+              if not payload.get("success"):
+                  raise SystemExit(json.dumps(payload, indent=2))
+              return payload
+
+          found = None
+          page = 1
+          while True:
+              url = base + "?" + urllib.parse.urlencode({"page": page, "per_page": 100})
+              payload = request("GET", url)
+              for ns in payload.get("result", []):
+                  if ns.get("title") == title:
+                      found = ns
+                      break
+              if found:
+                  break
+              info = payload.get("result_info") or {}
+              if page >= int(info.get("total_pages") or 1):
+                  break
+              page += 1
+
+          if not found:
+              found = request("POST", base, {"title": title})["result"]
+
+          kv_id = found["id"]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"kv_id={kv_id}\n")
+              f.write(f"kv_title={title}\n")
+          print(f"KV namespace: {title} ({kv_id})")
+          PY
+
       - name: Write wrangler.toml
         run: |
           cat > wrangler.toml <<'TOML'
@@ -51,7 +106,7 @@ jobs:
 
           [[kv_namespaces]]
           binding = "OIDC_KV"
-          id = "${{ vars.CF_KV_NAMESPACE_ID }}"
+          id = "${{ steps.kv.outputs.kv_id }}"
           TOML
 
       - name: Deploy

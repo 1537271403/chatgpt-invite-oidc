@@ -88,7 +88,7 @@ Required GitHub **Variables**:
 
 ```text
 CF_WORKER_NAME=chatgpt-invite-oidc
-CF_KV_NAMESPACE_ID=your-workers-kv-namespace-id
+CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
 OIDC_ISSUER=https://sso.example.com
 OIDC_CLIENT_ID=chatgpt-sso
 ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
@@ -99,11 +99,15 @@ FAMILY_NAME=Example
 Optional GitHub **Variables**:
 
 ```text
+# If omitted, the workflow creates/reuses KV namespace title: chatgpt-invite-oidc-kv
+CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
 TOKEN_TTL_SECONDS=3600
 CODE_TTL_SECONDS=300
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_MAX_ATTEMPTS=10
 ```
+
+The GitHub Action automatically creates or reuses the Workers KV namespace by title, so you do **not** need to create KV manually.
 
 Worker runtime secrets still need to be set once with Wrangler, because GitHub Actions does not write them by default:
 
