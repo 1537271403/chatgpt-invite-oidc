@@ -1,5 +1,7 @@
 # ChatGPT Invite OIDC
 
+[中文文档](README.zh-CN.md) | [Cloudflare Workers 中文部署](workers/README.md)
+
 Minimal self-hosted OIDC provider for ChatGPT/OpenAI SSO.
 
 It does **not** keep a user database. Users enter:
@@ -129,6 +131,6 @@ docker compose up -d
 ```
 ## Cloudflare Workers
 
-A Cloudflare Workers version is available in [`workers/`](workers/). It uses Workers KV for one-time authorization codes/rate limits and Wrangler secrets for invite/client/JWT secrets, so it can run without a VPS, Docker, Nginx, or Certbot.
+A Cloudflare Workers version is available in [`workers/`](workers/). It uses Workers KV for one-time authorization codes/rate limits, GitHub Actions for deployment, and automatic signing-key generation persisted in KV, so it can run without a VPS, Docker, Nginx, or Certbot.
 
 See [`workers/README.md`](workers/README.md).
