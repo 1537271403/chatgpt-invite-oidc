@@ -82,6 +82,9 @@ Required GitHub **Secrets**:
 ```text
 CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
+OIDC_CLIENT_SECRET
+INVITE_CODE
+OIDC_PRIVATE_JWK
 ```
 
 Required GitHub **Variables**:
@@ -107,15 +110,12 @@ RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_MAX_ATTEMPTS=10
 ```
 
-The GitHub Action automatically creates or reuses the Workers KV namespace by title, so you do **not** need to create KV manually.
+The GitHub Action automatically creates or reuses the Workers KV namespace by title, so you do **not** need to create KV manually. It also writes Worker runtime secrets from GitHub Secrets on every deploy, so first-time deployment can be fully completed from Actions.
 
-Worker runtime secrets still need to be set once with Wrangler, because GitHub Actions does not write them by default:
+Generate `OIDC_PRIVATE_JWK` locally once and save the full JSON as a GitHub Secret:
 
 ```bash
-cd workers
-npx wrangler secret put OIDC_CLIENT_SECRET
-npx wrangler secret put INVITE_CODE
-npx wrangler secret put OIDC_PRIVATE_JWK
+node -e 'crypto.subtle.generateKey({name:"RSASSA-PKCS1-v1_5",modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:"SHA-256"},true,["sign","verify"]).then(k=>crypto.subtle.exportKey("jwk",k.privateKey)).then(j=>{j.kid="main"; console.log(JSON.stringify(j))})'
 ```
 
-After that, every push to `main` that changes `workers/**` deploys automatically. You can also run the workflow manually from GitHub Actions.
+Every push to `main` that changes `workers/**` deploys automatically. You can also run the workflow manually from GitHub Actions.
