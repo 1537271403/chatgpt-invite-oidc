@@ -81,6 +81,21 @@ jobs:
           print(f"KV namespace: {title} ({kv_id})")
           PY
 
+      - name: Validate required GitHub Variables
+        env:
+          OIDC_ISSUER: ${{ vars.OIDC_ISSUER }}
+          ALLOWED_REDIRECT_URIS: ${{ vars.ALLOWED_REDIRECT_URIS }}
+          ALLOWED_EMAIL_DOMAIN: ${{ vars.ALLOWED_EMAIL_DOMAIN }}
+        run: |
+          set -euo pipefail
+          for name in OIDC_ISSUER ALLOWED_REDIRECT_URIS ALLOWED_EMAIL_DOMAIN; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub variable: $name" >&2
+              echo "Refusing to deploy with empty OIDC config." >&2
+              exit 1
+            fi
+          done
+
       - name: Write wrangler.toml
         run: |
           cat > wrangler.toml <<'TOML'
@@ -118,6 +133,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
           INVITE_CODE: ${{ secrets.INVITE_CODE }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          ADMIN_INVITE_CODE: ${{ secrets.ADMIN_INVITE_CODE }}
         run: |
           set -euo pipefail
           for name in OIDC_CLIENT_SECRET INVITE_CODE; do
@@ -128,3 +145,9 @@ jobs:
           done
           printf '%s' "$OIDC_CLIENT_SECRET" | npx wrangler secret put OIDC_CLIENT_SECRET --config wrangler.toml
           printf '%s' "$INVITE_CODE" | npx wrangler secret put INVITE_CODE --config wrangler.toml
+          if [ -n "${ADMIN_EMAILS:-}" ]; then
+            printf '%s' "$ADMIN_EMAILS" | npx wrangler secret put ADMIN_EMAILS --config wrangler.toml
+          fi
+          if [ -n "${ADMIN_INVITE_CODE:-}" ]; then
+            printf '%s' "$ADMIN_INVITE_CODE" | npx wrangler secret put ADMIN_INVITE_CODE --config wrangler.toml
+          fi

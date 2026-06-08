@@ -12,6 +12,8 @@ export interface Env {
   CODE_TTL_SECONDS?: string;
   RATE_LIMIT_WINDOW_SECONDS?: string;
   RATE_LIMIT_MAX_ATTEMPTS?: string;
+  ADMIN_EMAILS?: string;
+  ADMIN_INVITE_CODE?: string;
 }
 
 type AuthCode = { email: string; redirect_uri: string; client_id: string; scope: string; nonce?: string };
@@ -39,6 +41,8 @@ function config(env: Env) {
     codeTtl: toInt(env.CODE_TTL_SECONDS, 300),
     rateWindow: toInt(env.RATE_LIMIT_WINDOW_SECONDS, 60),
     rateMax: toInt(env.RATE_LIMIT_MAX_ATTEMPTS, 10),
+    adminEmails: (env.ADMIN_EMAILS || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+    adminInviteCode: env.ADMIN_INVITE_CODE || "",
   };
 }
 function json(data: unknown, status = 200): Response {
@@ -84,6 +88,19 @@ function validateClient(env: Env, clientId: string, redirectUri: string): Respon
   if (!c.redirects.includes(redirectUri)) return json({ error: "invalid_redirect_uri" }, 400);
   return undefined;
 }
+
+function validateInviteForEmail(env: Env, email: string, inviteCode: string): string | undefined {
+  const c = config(env);
+  const isAdminEmail = c.adminEmails.includes(email);
+  if (isAdminEmail) {
+    if (!c.adminInviteCode) return "管理账号未配置独立邀请码 / Admin invite code is not configured";
+    if (!safeEqual(inviteCode, c.adminInviteCode)) return "管理账号邀请码不正确 / Invalid admin invite code";
+    return undefined;
+  }
+  if (!safeEqual(inviteCode, c.inviteCode)) return "邀请码不正确 / Invalid invite code";
+  return undefined;
+}
+
 function claims(env: Env, email: string): Claims {
   const local = email.split("@", 1)[0];
   return { sub: email, email, email_verified: true, given_name: local, family_name: config(env).familyName, name: local, preferred_username: local };
@@ -178,8 +195,9 @@ export default {
         const c = config(env);
         const keep = { client_id: params.client_id || "", redirect_uri: params.redirect_uri || "", response_type: params.response_type || "", scope: params.scope || "", state: params.state || "", nonce: params.nonce || "" };
         const email = (params.email || "").trim().toLowerCase();
-        if (!safeEqual(params.invite_code || "", c.inviteCode)) return loginPage(env, keep, "邀请码不正确 / Invalid invite code");
         if (!email.endsWith(`@${c.domain}`)) return loginPage(env, keep, `邮箱必须是 @${c.domain}`);
+        const inviteError = validateInviteForEmail(env, email, params.invite_code || "");
+        if (inviteError) return loginPage(env, keep, inviteError);
         if (params.response_type !== "code") return json({ error: "unsupported_response_type" }, 400);
         const code = randomToken();
         const data: AuthCode = { email, redirect_uri: params.redirect_uri, client_id: params.client_id, scope: params.scope || "openid email profile", nonce: params.nonce || undefined };

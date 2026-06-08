@@ -228,3 +228,21 @@ npx wrangler deploy
 ```
 
 手动部署时需要把 KV namespace id 填入 `wrangler.toml`。
+
+## 管理账号独立邀请码
+
+如果需要防止普通邀请码登录管理邮箱，可以新增 GitHub Secrets：
+
+```text
+ADMIN_EMAILS=admin@example.com,owner@example.com
+ADMIN_INVITE_CODE=另一条更长的邀请码
+```
+
+逻辑：
+
+```text
+ADMIN_EMAILS 里的邮箱只能使用 ADMIN_INVITE_CODE 登录
+其他允许域名邮箱继续使用普通 INVITE_CODE 登录
+```
+
+注意：如果删除了 GitHub Variables 后手动 Run workflow，Action 会在部署前检查 `OIDC_ISSUER`、`ALLOWED_REDIRECT_URIS`、`ALLOWED_EMAIL_DOMAIN`。缺失时会直接失败，不会把 Cloudflare Worker 部署成空配置。
