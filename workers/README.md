@@ -68,27 +68,35 @@ Cloudflare Dashboard → Account ID
 Settings → Secrets and variables → Actions → Secrets
 ```
 
-添加：
+添加必需 Secrets：
 
 ```text
 CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
-OIDC_CLIENT_SECRET
-INVITE_CODE
+ADMIN_PASSWORD
 ```
 
-生成 `OIDC_CLIENT_SECRET` 和 `INVITE_CODE`：
+生成 `ADMIN_PASSWORD`：
 
 ```bash
-openssl rand -hex 32
 openssl rand -hex 32
 ```
 
 说明：
 
 ```text
-OIDC_CLIENT_SECRET = OpenAI 后台填写的 Client Secret
-INVITE_CODE        = 用户登录时输入的邀请码
+CLOUDFLARE_API_TOKEN  = GitHub Actions 部署 Worker 用
+CLOUDFLARE_ACCOUNT_ID = GitHub Actions 部署 Worker 用
+ADMIN_PASSWORD        = 登录 /admin 管理后台用；Basic Auth 用户名可任意填写
+```
+
+可删除旧版 Secrets：
+
+```text
+OIDC_CLIENT_SECRET
+INVITE_CODE
+ADMIN_EMAILS
+ADMIN_INVITE_CODE
 ```
 
 不需要配置 `OIDC_PRIVATE_JWK`，Worker 会自动生成 JWT 签名私钥并保存到 KV。
@@ -103,7 +111,7 @@ INVITE_CODE        = 用户登录时输入的邀请码
 Settings → Secrets and variables → Actions → Variables
 ```
 
-添加最小全局配置：
+添加必需 Variables：
 
 ```text
 CF_WORKER_NAME=chatgpt-invite-oidc
@@ -111,13 +119,16 @@ CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
 OIDC_ISSUER=https://sso.example.com
 ```
 
-多 Workspace 的 `Client ID`、`Client Secret`、邮箱域名、callback/fallback URLs、邀请码、名称都在 `/admin` 后台里维护。旧版单 Workspace 变量仍兼容，可作为没有 KV workspace 时的默认配置：
+多 Workspace 的 `Client ID`、`Client Secret`、邮箱域名、callback/fallback URLs、邀请码、名称都在 `/admin` 后台里维护。
+
+可删除旧版 Variables：
 
 ```text
-OIDC_CLIENT_ID=chatgpt-sso
-ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
-ALLOWED_EMAIL_DOMAINS=example.com,work.example
-FAMILY_NAME=Example
+OIDC_CLIENT_ID
+ALLOWED_REDIRECT_URIS
+ALLOWED_EMAIL_DOMAINS
+ALLOWED_EMAIL_DOMAIN
+FAMILY_NAME
 ```
 
 可选：
@@ -259,20 +270,45 @@ npx wrangler deploy
 
 手动部署时需要把 KV namespace id 填入 `wrangler.toml`。
 
-## 管理账号独立邀请码
+## 当前必需变量 / 密钥清单
 
-如果需要防止普通邀请码登录管理邮箱，可以新增 GitHub Secrets：
-
-```text
-ADMIN_EMAILS=admin@example.com,owner@example.com
-ADMIN_INVITE_CODE=另一条更长的邀请码
-```
-
-逻辑：
+### GitHub Secrets 必需
 
 ```text
-ADMIN_EMAILS 里的邮箱只能使用 ADMIN_INVITE_CODE 登录
-其他允许域名邮箱继续使用普通 INVITE_CODE 登录
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+ADMIN_PASSWORD
 ```
 
-注意：如果删除了 GitHub Variables 后手动 Run workflow，Action 会在部署前检查 `OIDC_ISSUER`、`ALLOWED_REDIRECT_URIS`、`ALLOWED_EMAIL_DOMAIN`。缺失时会直接失败，不会把 Cloudflare Worker 部署成空配置。
+### GitHub Variables 必需
+
+```text
+CF_WORKER_NAME
+CF_KV_NAMESPACE_TITLE
+OIDC_ISSUER
+```
+
+### GitHub Variables 可选
+
+```text
+TOKEN_TTL_SECONDS
+CODE_TTL_SECONDS
+RATE_LIMIT_WINDOW_SECONDS
+RATE_LIMIT_MAX_ATTEMPTS
+```
+
+### 已迁移到 `/admin`，不再需要的旧配置
+
+```text
+OIDC_CLIENT_ID
+OIDC_CLIENT_SECRET
+INVITE_CODE
+ALLOWED_REDIRECT_URIS
+ALLOWED_EMAIL_DOMAINS
+ALLOWED_EMAIL_DOMAIN
+FAMILY_NAME
+ADMIN_EMAILS
+ADMIN_INVITE_CODE
+```
+
+这些 workspace 相关内容现在都在 `/admin` 后台维护。
