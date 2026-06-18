@@ -4,38 +4,24 @@
 
 Minimal self-hosted OIDC provider for ChatGPT/OpenAI SSO.
 
-It does **not** keep a user database. Users enter:
-
-- `@your-domain` email
-- shared invite code
-
-The service validates both and returns OIDC claims based on the email:
-
-```json
-{
-  "sub": "alice@example.com",
-  "email": "alice@example.com",
-  "email_verified": true,
-  "given_name": "alice",
-  "family_name": "Example"
-}
-```
-
-> Security model: anyone who knows the invite code and an allowed-domain email can authenticate as that email. Use a long invite code, rotate it if leaked, and restrict the email domain.
+The recommended deployment is the Cloudflare Workers version in [`workers/`](workers/), but this repository also includes a Docker/FastAPI version.
 
 ## Features
 
 - OIDC discovery endpoint
-- RS256 signed ID tokens with persistent key volume
+- RS256 signed ID tokens with persistent signing key
 - Authorization code flow
 - Single-use authorization codes
 - `/userinfo` endpoint
-- Email-domain restriction
-- Shared invite-code gate
+- Multi-workspace admin UI at `/admin`
+- Per-workspace Client ID / Client Secret
+- Per-workspace invite code
+- Per-workspace email domain allowlist
+- Per-workspace redirect/callback/fallback URL allowlist
 - Basic per-IP rate limiting on invite attempts
 - Docker Compose deployment
 
-## Quick deploy
+## Docker quick deploy
 
 ```bash
 git clone https://github.com/YOUR_USER/chatgpt-invite-oidc.git
@@ -47,16 +33,33 @@ docker compose up -d --build
 curl http://127.0.0.1:8090/healthz
 ```
 
-## Required `.env`
+## Required `.env` for Docker/FastAPI
 
 ```env
 OIDC_ISSUER=https://oidc.example.com
-OIDC_CLIENT_ID=chatgpt-sso
-OIDC_CLIENT_SECRET=replace-with-a-long-random-secret
-ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
-INVITE_CODE=replace-with-a-long-random-invite-code
-ALLOWED_EMAIL_DOMAINS=example.com,work.example
+ADMIN_PASSWORD=replace-with-a-long-random-admin-password
 HOST_PORT=8090
+```
+
+Optional tuning:
+
+```env
+CODE_TTL_SECONDS=300
+TOKEN_TTL_SECONDS=3600
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_MAX_ATTEMPTS=10
+DATA_DIR=/data
+```
+
+Legacy single-workspace fallback variables are still supported when no workspaces exist in `/admin`, but new deployments should manage workspaces in `/admin` instead:
+
+```env
+# OIDC_CLIENT_ID=chatgpt-sso
+# OIDC_CLIENT_SECRET=replace-with-a-long-random-secret
+# ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
+# INVITE_CODE=replace-with-a-long-random-invite-code
+# ALLOWED_EMAIL_DOMAINS=example.com,work.example
+# FAMILY_NAME=Example
 ```
 
 Generate secrets:
@@ -64,6 +67,49 @@ Generate secrets:
 ```bash
 openssl rand -hex 32
 ```
+
+## Admin UI
+
+Open:
+
+```text
+https://oidc.example.com/admin
+```
+
+Basic Auth:
+
+```text
+Username: any value
+Password: ADMIN_PASSWORD
+```
+
+Create one workspace per ChatGPT/OpenAI workspace. Each workspace has its own:
+
+```text
+Name
+Client ID
+Client Secret
+Invite Code
+Allowed Email Domains
+Redirect / Callback / Fallback URLs
+Family Name claim
+Enabled flag
+```
+
+The OIDC flow selects the workspace by `client_id + redirect_uri`, so multiple ChatGPT workspaces can share one issuer safely.
+
+## OpenAI / ChatGPT SSO config
+
+Use the values from the matching `/admin` workspace:
+
+```text
+Client ID: workspace Client ID
+Client Secret: workspace Client Secret
+Discovery Endpoint: https://oidc.example.com/.well-known/openid-configuration
+Scopes: openid email profile
+```
+
+Add every OpenAI callback/fallback URL to that workspace's `Redirect / Callback / Fallback URLs` list.
 
 ## Nginx
 
@@ -84,20 +130,6 @@ curl https://oidc.example.com/.well-known/openid-configuration
 curl https://oidc.example.com/jwks
 ```
 
-## OpenAI / ChatGPT SSO config
-
-Use:
-
-```text
-Client ID: chatgpt-sso
-Client Secret: value of OIDC_CLIENT_SECRET
-Discovery Endpoint: https://oidc.example.com/.well-known/openid-configuration
-Scopes: openid email profile
-```
-
-The OpenAI callback URL must be listed exactly in `ALLOWED_REDIRECT_URIS`.
-Use `ALLOWED_EMAIL_DOMAINS` as a comma-separated allowlist when multiple ChatGPT workspaces verify different email domains, for example `example.com,work.example`. The older single-domain `ALLOWED_EMAIL_DOMAIN` variable is still supported for existing deployments.
-
 ## Endpoints
 
 - `GET /.well-known/openid-configuration`
@@ -107,31 +139,21 @@ Use `ALLOWED_EMAIL_DOMAINS` as a comma-separated allowlist when multiple ChatGPT
 - `POST /token`
 - `GET /userinfo`
 - `GET /healthz`
+- `GET /admin`
+- `POST /admin/save`
+- `POST /admin/delete`
 
 ## Tests
 
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e . pytest httpx
+pip install fastapi pyjwt[crypto] cryptography python-multipart jinja2 pytest httpx
 pytest -q
 ```
 
-## Rotate invite code
-
-Edit `.env`:
-
-```env
-INVITE_CODE=new-long-code
-```
-
-Then restart:
-
-```bash
-docker compose up -d
-```
 ## Cloudflare Workers
 
-A Cloudflare Workers version is available in [`workers/`](workers/). It uses Workers KV for one-time authorization codes/rate limits, GitHub Actions for deployment, and automatic signing-key generation persisted in KV, so it can run without a VPS, Docker, Nginx, or Certbot.
+A Cloudflare Workers version is available in [`workers/`](workers/). It uses Workers KV for workspace config, one-time authorization codes, rate limits, and automatic signing-key persistence, so it can run without a VPS, Docker, Nginx, or Certbot.
 
 See [`workers/README.md`](workers/README.md).

@@ -4,6 +4,8 @@ import os
 
 os.environ.setdefault("OIDC_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("INVITE_CODE", "test-invite-code")
+os.environ.setdefault("ADMIN_PASSWORD", "test-admin-password")
+os.environ.setdefault("DATA_DIR", "/tmp/chatgpt-invite-oidc-tests")
 os.environ.setdefault("ALLOWED_EMAIL_DOMAINS", "example.com,work.example")
 os.environ.setdefault(
     "ALLOWED_REDIRECT_URIS",
@@ -94,6 +96,82 @@ def test_legacy_allowed_email_domain_remains_supported(monkeypatch):
     legacy_settings = Settings()
 
     assert legacy_settings.allowed_email_domains == ["legacy.example"]
+
+
+def test_admin_can_create_workspace_and_oidc_uses_workspace_config():
+    client.post(
+        "/admin/save",
+        auth=("admin", settings.admin_password),
+        data={
+            "id": "team-a",
+            "name": "Team A",
+            "client_id": "team-a-client",
+            "client_secret": "team-a-secret",
+            "invite_code": "team-a-invite",
+            "allowed_email_domains": "team.example",
+            "redirect_uris": "https://external.auth.openai.com/sso/oidc/team-a/callback\nhttps://external.auth.openai.com/sso/oidc/team-a/fallback",
+            "family_name": "TeamA",
+            "enabled": "on",
+        },
+        follow_redirects=False,
+    )
+
+    bad_redirect = client.get(
+        "/authorize",
+        params={
+            "client_id": "team-a-client",
+            "redirect_uri": "https://external.auth.openai.com/sso/oidc/other/callback",
+            "response_type": "code",
+        },
+    )
+    assert bad_redirect.status_code == 400
+
+    auth = client.post(
+        "/authorize",
+        data={
+            "client_id": "team-a-client",
+            "redirect_uri": "https://external.auth.openai.com/sso/oidc/team-a/fallback",
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": "state-team-a",
+            "nonce": "nonce-team-a",
+            "email": "alice@team.example",
+            "invite_code": "team-a-invite",
+        },
+        follow_redirects=False,
+    )
+    assert auth.status_code == 302
+    qs = parse_qs(urlparse(auth.headers["location"]).query)
+    code = qs["code"][0]
+
+    wrong_secret = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "https://external.auth.openai.com/sso/oidc/team-a/fallback",
+            "client_id": "team-a-client",
+            "client_secret": "wrong",
+        },
+    )
+    assert wrong_secret.status_code == 401
+
+    # The failed token exchange must not consume the authorization code.
+    token = client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "https://external.auth.openai.com/sso/oidc/team-a/fallback",
+            "client_id": "team-a-client",
+            "client_secret": "team-a-secret",
+        },
+    )
+    assert token.status_code == 200
+    access_token = token.json()["access_token"]
+    claims = client.get("/userinfo", headers={"Authorization": f"Bearer {access_token}"}).json()
+    assert claims["email"] == "alice@team.example"
+    assert claims["family_name"] == "TeamA"
 
 
 def test_authorize_issues_code_and_token_contains_required_claims():
