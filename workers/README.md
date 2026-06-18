@@ -1,74 +1,32 @@
-# Cloudflare Workers 部署
+# Cloudflare Workers Deployment
 
-这是 invite-code OIDC Provider 的 Cloudflare Workers 版本。
+This is the Cloudflare Workers version of ChatGPT Invite OIDC.
 
-推荐通过 GitHub Actions 部署：
+Use this version if you want:
 
 ```text
-不需要 VPS
-不需要 Docker
-不需要 Nginx
-不需要 Certbot
-自动创建 / 复用 Workers KV
-自动写入 Worker Secrets
-JWT 签名私钥自动生成并保存到 KV
+No VPS
+No Docker
+No Nginx
+No Certbot
+Automatic HTTPS through Cloudflare
+Workspace config stored in Workers KV
+Deployment through GitHub Actions
 ```
+
+The Worker supports multiple ChatGPT / OpenAI workspaces through `/admin`.
 
 ---
 
-## 目录
+## 1. Required GitHub Secrets
 
-```text
-workers/
-├── src/index.ts
-├── package.json
-├── wrangler.example.toml
-└── README.md
-```
-
-Action 文件：
-
-```text
-.github/workflows/deploy-workers.yml
-```
-
----
-
-## 1. 准备 Cloudflare API Token
-
-进入 Cloudflare：
-
-```text
-My Profile → API Tokens → Create Token
-```
-
-建议权限：
-
-```text
-Account → Workers Scripts → Edit
-Account → Workers KV Storage → Edit
-Account → Account Settings → Read
-Zone → Zone → Read
-Zone → Workers Routes → Edit
-```
-
-还需要 Cloudflare Account ID：
-
-```text
-Cloudflare Dashboard → Account ID
-```
-
----
-
-## 2. 配置 GitHub Secrets
-
-进入 GitHub 仓库：
+Repository path:
 
 ```text
 Settings → Secrets and variables → Actions → Secrets
 ```
 
-添加必需 Secrets：
+Create / keep:
 
 ```text
 CLOUDFLARE_API_TOKEN
@@ -76,21 +34,21 @@ CLOUDFLARE_ACCOUNT_ID
 ADMIN_PASSWORD
 ```
 
-生成 `ADMIN_PASSWORD`：
+Generate `ADMIN_PASSWORD`:
 
 ```bash
 openssl rand -hex 32
 ```
 
-说明：
+Meaning:
 
 ```text
-CLOUDFLARE_API_TOKEN  = GitHub Actions 部署 Worker 用
-CLOUDFLARE_ACCOUNT_ID = GitHub Actions 部署 Worker 用
-ADMIN_PASSWORD        = 登录 /admin 管理后台用；Basic Auth 用户名可任意填写
+CLOUDFLARE_API_TOKEN  = deploy Worker from GitHub Actions
+CLOUDFLARE_ACCOUNT_ID = deploy Worker from GitHub Actions
+ADMIN_PASSWORD        = /admin Basic Auth password; username can be any value
 ```
 
-可删除旧版 Secrets：
+Old secrets are no longer needed because workspace settings live in `/admin`:
 
 ```text
 OIDC_CLIENT_SECRET
@@ -99,19 +57,17 @@ ADMIN_EMAILS
 ADMIN_INVITE_CODE
 ```
 
-不需要配置 `OIDC_PRIVATE_JWK`，Worker 会自动生成 JWT 签名私钥并保存到 KV。
-
 ---
 
-## 3. 配置 GitHub Variables
+## 2. Required GitHub Variables
 
-进入：
+Repository path:
 
 ```text
 Settings → Secrets and variables → Actions → Variables
 ```
 
-添加必需 Variables：
+Create / keep:
 
 ```text
 CF_WORKER_NAME=chatgpt-invite-oidc
@@ -119,9 +75,18 @@ CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
 OIDC_ISSUER=https://sso.example.com
 ```
 
-多 Workspace 的 `Client ID`、`Client Secret`、邮箱域名、callback/fallback URLs、邀请码、名称都在 `/admin` 后台里维护。
+Important: `OIDC_ISSUER` must include `https://`.
 
-可删除旧版 Variables：
+Optional variables:
+
+```text
+TOKEN_TTL_SECONDS=3600
+CODE_TTL_SECONDS=300
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_MAX_ATTEMPTS=10
+```
+
+Old variables are no longer needed:
 
 ```text
 OIDC_CLIENT_ID
@@ -131,43 +96,60 @@ ALLOWED_EMAIL_DOMAIN
 FAMILY_NAME
 ```
 
-可选：
+---
+
+## 3. Cloudflare API Token permissions
+
+Create a Cloudflare token at:
 
 ```text
-TOKEN_TTL_SECONDS=3600
-CODE_TTL_SECONDS=300
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_MAX_ATTEMPTS=10
+My Profile → API Tokens → Create Token
+```
+
+Suggested permissions:
+
+```text
+Account → Workers Scripts → Edit
+Account → Workers KV Storage → Edit
+Account → Account Settings → Read
+Zone → Zone → Read
+Zone → Workers Routes → Edit
+```
+
+You also need the Cloudflare Account ID:
+
+```text
+Cloudflare Dashboard → Account ID
 ```
 
 ---
 
-## 4. 运行 Action
+## 4. Deploy
 
-进入：
+Run manually:
 
 ```text
 Actions → Deploy Cloudflare Workers → Run workflow
 ```
 
-Action 会自动：
+The Action will:
 
 ```text
 npm ci
 npm run check
-创建 / 复用 Workers KV
-生成 wrangler.toml
-部署 Worker
-写入 Worker Secrets
+create / reuse Workers KV
+write wrangler.toml
+deploy Worker
+write Worker secrets
 ```
 
-以后 push 到 `main` 且修改 `workers/**` 时，会自动部署。
+Future pushes to `main` that touch `workers/**` also deploy automatically.
 
 ---
 
-## 5. 绑定自定义域名
+## 5. Bind a custom domain
 
-Cloudflare：
+Cloudflare:
 
 ```text
 Workers & Pages
@@ -178,17 +160,13 @@ Workers & Pages
 → Custom Domain
 ```
 
-填写：
+Example:
 
 ```text
 sso.example.com
 ```
 
-Cloudflare 会自动处理 HTTPS。
-
----
-
-## 6. 验证
+Then verify:
 
 ```bash
 curl https://sso.example.com/healthz
@@ -196,36 +174,26 @@ curl https://sso.example.com/.well-known/openid-configuration
 curl https://sso.example.com/jwks
 ```
 
-正常：
-
-```json
-{"ok":true}
-```
-
-OpenAI Discovery Endpoint：
-
-```text
-https://sso.example.com/.well-known/openid-configuration
-```
-
 ---
 
-## 7. 管理后台与 OpenAI / ChatGPT SSO 配置
+## 6. Admin UI
 
-部署后打开：
+Open:
 
 ```text
 https://sso.example.com/admin
 ```
 
-浏览器会弹出 Basic Auth：
+Basic Auth:
 
 ```text
-Username: 任意值
+Username: any value
 Password: ADMIN_PASSWORD
 ```
 
-在后台为每个 ChatGPT workspace 新增一条 Workspace，分别填写：
+Create one workspace per ChatGPT / OpenAI workspace.
+
+Each workspace contains:
 
 ```text
 Name
@@ -234,25 +202,42 @@ Client Secret
 Invite Code
 Allowed Email Domains
 Redirect / Callback / Fallback URLs
-Family Name
+Family Name claim
+Enabled
 ```
 
-OpenAI / ChatGPT SSO 页面填写：
+The Worker selects a workspace by:
 
 ```text
-Client ID: 后台里该 Workspace 的 Client ID
-Client Secret: 后台里该 Workspace 的 Client Secret
+client_id + redirect_uri
+```
+
+This keeps multiple OpenAI workspaces isolated from each other.
+
+---
+
+## 7. OpenAI / ChatGPT SSO settings
+
+Use values from the matching `/admin` workspace:
+
+```text
+Client ID: workspace Client ID
+Client Secret: workspace Client Secret
 Discovery Endpoint: https://sso.example.com/.well-known/openid-configuration
 Scopes: openid email profile
 ```
 
-OpenAI 给的 callback/fallback URL 必须完整加入该 Workspace 的 `Redirect / Callback / Fallback URLs` 列表。
+Add every OpenAI callback / fallback URL to that workspace:
+
+```text
+Redirect / Callback / Fallback URLs
+```
 
 ---
 
-# 本地 Wrangler 部署，可选
+## 8. Local Wrangler deployment, optional
 
-一般不需要。如果不用 GitHub Actions，可以手动：
+Normally not needed. If you do not use GitHub Actions:
 
 ```bash
 cd workers
@@ -262,17 +247,53 @@ npx wrangler login
 npx wrangler kv namespace create OIDC_KV
 npm run check
 npx wrangler secret put ADMIN_PASSWORD
-# Optional legacy single-workspace fallback only:
-# npx wrangler secret put OIDC_CLIENT_SECRET
-# npx wrangler secret put INVITE_CODE
 npx wrangler deploy
 ```
 
-手动部署时需要把 KV namespace id 填入 `wrangler.toml`。
+Fill the KV namespace id in `wrangler.toml` before deploying.
 
-## 当前必需变量 / 密钥清单
+---
 
-### GitHub Secrets 必需
+## 9. Troubleshooting
+
+### Endpoints unreachable in OpenAI
+
+Check discovery:
+
+```bash
+curl https://sso.example.com/.well-known/openid-configuration
+```
+
+Make sure the response contains full HTTPS URLs:
+
+```json
+{
+  "issuer": "https://sso.example.com",
+  "authorization_endpoint": "https://sso.example.com/authorize",
+  "token_endpoint": "https://sso.example.com/token",
+  "jwks_uri": "https://sso.example.com/jwks"
+}
+```
+
+If the URLs look like `sso.example.com/authorize`, fix `OIDC_ISSUER` to include `https://` and redeploy.
+
+### invalid_client_id
+
+The Client ID entered in OpenAI does not match any enabled workspace in `/admin`.
+
+### invalid_redirect_uri
+
+The OpenAI callback / fallback URL was not added to that workspace's URL allowlist.
+
+### invalid_client
+
+The OpenAI Client Secret does not match the workspace Client Secret.
+
+---
+
+## 10. Current required checklist
+
+Secrets:
 
 ```text
 CLOUDFLARE_API_TOKEN
@@ -280,7 +301,7 @@ CLOUDFLARE_ACCOUNT_ID
 ADMIN_PASSWORD
 ```
 
-### GitHub Variables 必需
+Variables:
 
 ```text
 CF_WORKER_NAME
@@ -288,27 +309,4 @@ CF_KV_NAMESPACE_TITLE
 OIDC_ISSUER
 ```
 
-### GitHub Variables 可选
-
-```text
-TOKEN_TTL_SECONDS
-CODE_TTL_SECONDS
-RATE_LIMIT_WINDOW_SECONDS
-RATE_LIMIT_MAX_ATTEMPTS
-```
-
-### 已迁移到 `/admin`，不再需要的旧配置
-
-```text
-OIDC_CLIENT_ID
-OIDC_CLIENT_SECRET
-INVITE_CODE
-ALLOWED_REDIRECT_URIS
-ALLOWED_EMAIL_DOMAINS
-ALLOWED_EMAIL_DOMAIN
-FAMILY_NAME
-ADMIN_EMAILS
-ADMIN_INVITE_CODE
-```
-
-这些 workspace 相关内容现在都在 `/admin` 后台维护。
+Everything else workspace-related is configured in `/admin`.
