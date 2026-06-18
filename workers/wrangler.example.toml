@@ -5,10 +5,11 @@ compatibility_date = "2025-01-01"
 # Public, non-secret configuration. Copy to wrangler.toml and edit.
 [vars]
 OIDC_ISSUER = "https://sso.example.com"
-OIDC_CLIENT_ID = "chatgpt-sso"
-ALLOWED_REDIRECT_URIS = "https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback"
-ALLOWED_EMAIL_DOMAINS = "example.com,work.example"
-FAMILY_NAME = "Example"
+# Optional legacy single-workspace fallback. Prefer managing workspaces in /admin.
+# OIDC_CLIENT_ID = "chatgpt-sso"
+# ALLOWED_REDIRECT_URIS = "https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback"
+# ALLOWED_EMAIL_DOMAINS = "example.com,work.example"
+# FAMILY_NAME = "Example"
 TOKEN_TTL_SECONDS = "3600"
 CODE_TTL_SECONDS = "300"
 RATE_LIMIT_WINDOW_SECONDS = "60"

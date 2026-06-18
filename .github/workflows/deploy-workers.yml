@@ -137,23 +137,19 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           OIDC_CLIENT_SECRET: ${{ secrets.OIDC_CLIENT_SECRET }}
           INVITE_CODE: ${{ secrets.INVITE_CODE }}
-          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
-          ADMIN_INVITE_CODE: ${{ secrets.ADMIN_INVITE_CODE }}
         run: |
           set -euo pipefail
-          for name in OIDC_CLIENT_SECRET INVITE_CODE; do
-            if [ -z "${!name:-}" ]; then
-              echo "Missing required GitHub secret: $name" >&2
-              exit 1
-            fi
-          done
-          printf '%s' "$OIDC_CLIENT_SECRET" | npx wrangler secret put OIDC_CLIENT_SECRET --config wrangler.toml
-          printf '%s' "$INVITE_CODE" | npx wrangler secret put INVITE_CODE --config wrangler.toml
-          if [ -n "${ADMIN_EMAILS:-}" ]; then
-            printf '%s' "$ADMIN_EMAILS" | npx wrangler secret put ADMIN_EMAILS --config wrangler.toml
+          if [ -z "${ADMIN_PASSWORD:-}" ]; then
+            echo "Missing required GitHub secret: ADMIN_PASSWORD" >&2
+            exit 1
           fi
-          if [ -n "${ADMIN_INVITE_CODE:-}" ]; then
-            printf '%s' "$ADMIN_INVITE_CODE" | npx wrangler secret put ADMIN_INVITE_CODE --config wrangler.toml
+          printf '%s' "$ADMIN_PASSWORD" | npx wrangler secret put ADMIN_PASSWORD --config wrangler.toml
+          if [ -n "${OIDC_CLIENT_SECRET:-}" ]; then
+            printf '%s' "$OIDC_CLIENT_SECRET" | npx wrangler secret put OIDC_CLIENT_SECRET --config wrangler.toml
+          fi
+          if [ -n "${INVITE_CODE:-}" ]; then
+            printf '%s' "$INVITE_CODE" | npx wrangler secret put INVITE_CODE --config wrangler.toml
           fi

@@ -103,15 +103,20 @@ INVITE_CODE        = 用户登录时输入的邀请码
 Settings → Secrets and variables → Actions → Variables
 ```
 
-添加：
+添加最小全局配置：
 
 ```text
 CF_WORKER_NAME=chatgpt-invite-oidc
 CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
 OIDC_ISSUER=https://sso.example.com
+```
+
+多 Workspace 的 `Client ID`、`Client Secret`、邮箱域名、callback/fallback URLs、邀请码、名称都在 `/admin` 后台里维护。旧版单 Workspace 变量仍兼容，可作为没有 KV workspace 时的默认配置：
+
+```text
 OIDC_CLIENT_ID=chatgpt-sso
 ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
-ALLOWED_EMAIL_DOMAIN=example.com
+ALLOWED_EMAIL_DOMAINS=example.com,work.example
 FAMILY_NAME=Example
 ```
 
@@ -194,20 +199,43 @@ https://sso.example.com/.well-known/openid-configuration
 
 ---
 
-## 7. OpenAI / ChatGPT SSO 配置
+## 7. 管理后台与 OpenAI / ChatGPT SSO 配置
+
+部署后打开：
 
 ```text
-Client ID: value of OIDC_CLIENT_ID, default chatgpt-sso
-Client Secret: value of OIDC_CLIENT_SECRET
+https://sso.example.com/admin
+```
+
+浏览器会弹出 Basic Auth：
+
+```text
+Username: 任意值
+Password: ADMIN_PASSWORD
+```
+
+在后台为每个 ChatGPT workspace 新增一条 Workspace，分别填写：
+
+```text
+Name
+Client ID
+Client Secret
+Invite Code
+Allowed Email Domains
+Redirect / Callback / Fallback URLs
+Family Name
+```
+
+OpenAI / ChatGPT SSO 页面填写：
+
+```text
+Client ID: 后台里该 Workspace 的 Client ID
+Client Secret: 后台里该 Workspace 的 Client Secret
 Discovery Endpoint: https://sso.example.com/.well-known/openid-configuration
 Scopes: openid email profile
 ```
 
-OpenAI 给的 callback URL 必须完整填到：
-
-```text
-ALLOWED_REDIRECT_URIS
-```
+OpenAI 给的 callback/fallback URL 必须完整加入该 Workspace 的 `Redirect / Callback / Fallback URLs` 列表。
 
 ---
 
@@ -222,8 +250,10 @@ cp wrangler.example.toml wrangler.toml
 npx wrangler login
 npx wrangler kv namespace create OIDC_KV
 npm run check
-npx wrangler secret put OIDC_CLIENT_SECRET
-npx wrangler secret put INVITE_CODE
+npx wrangler secret put ADMIN_PASSWORD
+# Optional legacy single-workspace fallback only:
+# npx wrangler secret put OIDC_CLIENT_SECRET
+# npx wrangler secret put INVITE_CODE
 npx wrangler deploy
 ```
 
