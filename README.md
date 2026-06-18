@@ -55,7 +55,7 @@ OIDC_CLIENT_ID=chatgpt-sso
 OIDC_CLIENT_SECRET=replace-with-a-long-random-secret
 ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
 INVITE_CODE=replace-with-a-long-random-invite-code
-ALLOWED_EMAIL_DOMAIN=example.com
+ALLOWED_EMAIL_DOMAINS=example.com,work.example
 HOST_PORT=8090
 ```
 
@@ -96,6 +96,7 @@ Scopes: openid email profile
 ```
 
 The OpenAI callback URL must be listed exactly in `ALLOWED_REDIRECT_URIS`.
+Use `ALLOWED_EMAIL_DOMAINS` as a comma-separated allowlist when multiple ChatGPT workspaces verify different email domains, for example `example.com,work.example`. The older single-domain `ALLOWED_EMAIL_DOMAIN` variable is still supported for existing deployments.
 
 ## Endpoints
 

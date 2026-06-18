@@ -85,16 +85,22 @@ jobs:
         env:
           OIDC_ISSUER: ${{ vars.OIDC_ISSUER }}
           ALLOWED_REDIRECT_URIS: ${{ vars.ALLOWED_REDIRECT_URIS }}
+          ALLOWED_EMAIL_DOMAINS: ${{ vars.ALLOWED_EMAIL_DOMAINS }}
           ALLOWED_EMAIL_DOMAIN: ${{ vars.ALLOWED_EMAIL_DOMAIN }}
         run: |
           set -euo pipefail
-          for name in OIDC_ISSUER ALLOWED_REDIRECT_URIS ALLOWED_EMAIL_DOMAIN; do
+          for name in OIDC_ISSUER ALLOWED_REDIRECT_URIS; do
             if [ -z "${!name:-}" ]; then
               echo "Missing required GitHub variable: $name" >&2
               echo "Refusing to deploy with empty OIDC config." >&2
               exit 1
             fi
           done
+          if [ -z "${ALLOWED_EMAIL_DOMAINS:-}" ] && [ -z "${ALLOWED_EMAIL_DOMAIN:-}" ]; then
+            echo "Missing required GitHub variable: ALLOWED_EMAIL_DOMAINS or legacy ALLOWED_EMAIL_DOMAIN" >&2
+            echo "Refusing to deploy with empty OIDC config." >&2
+            exit 1
+          fi
 
       - name: Write wrangler.toml
         run: |
@@ -107,7 +113,7 @@ jobs:
           OIDC_ISSUER = "${{ vars.OIDC_ISSUER }}"
           OIDC_CLIENT_ID = "${{ vars.OIDC_CLIENT_ID || 'chatgpt-sso' }}"
           ALLOWED_REDIRECT_URIS = "${{ vars.ALLOWED_REDIRECT_URIS }}"
-          ALLOWED_EMAIL_DOMAIN = "${{ vars.ALLOWED_EMAIL_DOMAIN }}"
+          ALLOWED_EMAIL_DOMAINS = "${{ vars.ALLOWED_EMAIL_DOMAINS || vars.ALLOWED_EMAIL_DOMAIN }}"
           TOKEN_TTL_SECONDS = "${{ vars.TOKEN_TTL_SECONDS || '3600' }}"
           CODE_TTL_SECONDS = "${{ vars.CODE_TTL_SECONDS || '300' }}"
           RATE_LIMIT_WINDOW_SECONDS = "${{ vars.RATE_LIMIT_WINDOW_SECONDS || '60' }}"

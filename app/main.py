@@ -25,7 +25,7 @@ class Settings:
     client_id: str = os.getenv("OIDC_CLIENT_ID", "chatgpt-sso")
     client_secret: str = os.getenv("OIDC_CLIENT_SECRET", "")
     invite_code: str = os.getenv("INVITE_CODE", "")
-    allowed_email_domain: str = os.getenv("ALLOWED_EMAIL_DOMAIN", "example.com").lower().lstrip("@")
+    allowed_email_domains: list[str] = None  # type: ignore[assignment]
     allowed_redirect_uris: list[str] = None  # type: ignore[assignment]
     code_ttl_seconds: int = int(os.getenv("CODE_TTL_SECONDS", "300"))
     token_ttl_seconds: int = int(os.getenv("TOKEN_TTL_SECONDS", "3600"))
@@ -34,6 +34,12 @@ class Settings:
     data_dir: Path = Path(os.getenv("DATA_DIR", "/data"))
 
     def __post_init__(self):
+        domains = os.getenv("ALLOWED_EMAIL_DOMAINS") or os.getenv("ALLOWED_EMAIL_DOMAIN", "example.com")
+        self.allowed_email_domains = []
+        for domain in domains.split(","):
+            domain = domain.strip().lower().lstrip("@")
+            if domain and domain not in self.allowed_email_domains:
+                self.allowed_email_domains.append(domain)
         redirects = os.getenv("ALLOWED_REDIRECT_URIS", "")
         self.allowed_redirect_uris = [x.strip() for x in redirects.split(",") if x.strip()]
         missing = []
@@ -125,6 +131,14 @@ def validate_client(client_id: str, redirect_uri: str):
         raise HTTPException(status_code=400, detail="invalid redirect_uri")
 
 
+def allowed_domains_text() -> str:
+    return ", ".join(f"@{domain}" for domain in settings.allowed_email_domains)
+
+
+def email_domain_allowed(email: str) -> bool:
+    return any(email.endswith("@" + domain) for domain in settings.allowed_email_domains)
+
+
 def make_claims(email: str) -> dict:
     local = email.split("@", 1)[0]
     return {
@@ -144,7 +158,8 @@ def html_login(params: dict, error: str | None = None) -> HTMLResponse:
         for k, v in params.items()
     )
     error_html = f'<div class="err">{error}</div>' if error else ""
-    domain = settings.allowed_email_domain
+    domains = allowed_domains_text()
+    placeholder_domain = settings.allowed_email_domains[0]
     return HTMLResponse(
         f"""
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -153,9 +168,9 @@ body{{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0f172a
 .card{{width:min(92vw,420px);background:#111827;border:1px solid #334155;border-radius:18px;padding:28px;box-shadow:0 20px 60px #0008}}
 h1{{margin:0 0 8px;font-size:26px}}p{{color:#94a3b8}}label{{display:block;margin:16px 0 6px;color:#cbd5e1}}input{{box-sizing:border-box;width:100%;padding:12px 14px;border-radius:10px;border:1px solid #475569;background:#020617;color:#fff;font-size:16px}}
 button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:10px;background:#10a37f;color:white;font-weight:700;font-size:16px;cursor:pointer}}.err{{background:#7f1d1d;color:#fecaca;padding:10px;border-radius:10px;margin:12px 0}}small{{color:#64748b}}
-</style></head><body><main class="card"><h1>ChatGPT SSO</h1><p>输入 @{domain} 邮箱和邀请码登录。</p>{error_html}
+</style></head><body><main class="card"><h1>ChatGPT SSO</h1><p>输入 {domains} 邮箱和邀请码登录。</p>{error_html}
 <form method="post" action="/authorize">{hidden}
-<label>Email</label><input name="email" type="email" placeholder="you@{domain}" required autofocus>
+<label>Email</label><input name="email" type="email" placeholder="you@{placeholder_domain}" required autofocus>
 <label>Invite code</label><input name="invite_code" type="password" required>
 <button type="submit">Continue to ChatGPT</button></form><p><small>No account registration required.</small></p></main></body></html>
 """
@@ -224,8 +239,8 @@ def authorize_submit(
         response = html_login(params, "邀请码不正确 / Invalid invite code")
         response.status_code = 401
         return response
-    if not email.endswith("@" + settings.allowed_email_domain):
-        response = html_login(params, f"邮箱必须是 @{settings.allowed_email_domain}")
+    if not email_domain_allowed(email):
+        response = html_login(params, f"邮箱必须是以下域名之一 / Email must use one of: {allowed_domains_text()}")
         response.status_code = 400
         return response
     if response_type != "code":

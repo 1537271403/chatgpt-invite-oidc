@@ -4,6 +4,7 @@ import os
 
 os.environ.setdefault("OIDC_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("INVITE_CODE", "test-invite-code")
+os.environ.setdefault("ALLOWED_EMAIL_DOMAINS", "example.com,work.example")
 os.environ.setdefault(
     "ALLOWED_REDIRECT_URIS",
     "https://external.auth.openai.com/sso/oidc/test-connection/callback",
@@ -61,6 +62,38 @@ def test_authorize_rejects_wrong_email_domain():
     )
     assert r.status_code == 400
     assert "@example.com" in r.text
+    assert "@work.example" in r.text
+
+
+def test_authorize_accepts_each_allowed_email_domain():
+    for email in ["alice@example.com", "bob@work.example"]:
+        r = client.post(
+            "/authorize",
+            data={
+                "client_id": settings.client_id,
+                "redirect_uri": settings.allowed_redirect_uris[0],
+                "response_type": "code",
+                "scope": "openid email profile",
+                "state": "abc",
+                "nonce": "nonce",
+                "email": email,
+                "invite_code": settings.invite_code,
+            },
+            follow_redirects=False,
+        )
+        assert r.status_code == 302
+        qs = parse_qs(urlparse(r.headers["location"]).query)
+        assert qs["code"][0]
+
+
+def test_legacy_allowed_email_domain_remains_supported(monkeypatch):
+    monkeypatch.delenv("ALLOWED_EMAIL_DOMAINS", raising=False)
+    monkeypatch.setenv("ALLOWED_EMAIL_DOMAIN", "legacy.example")
+    from app.main import Settings
+
+    legacy_settings = Settings()
+
+    assert legacy_settings.allowed_email_domains == ["legacy.example"]
 
 
 def test_authorize_issues_code_and_token_contains_required_claims():

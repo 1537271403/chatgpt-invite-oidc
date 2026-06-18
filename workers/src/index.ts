@@ -6,7 +6,8 @@ export interface Env {
   OIDC_PRIVATE_JWK?: string;
   INVITE_CODE: string;
   ALLOWED_REDIRECT_URIS: string;
-  ALLOWED_EMAIL_DOMAIN: string;
+  ALLOWED_EMAIL_DOMAINS?: string;
+  ALLOWED_EMAIL_DOMAIN?: string;
   FAMILY_NAME?: string;
   TOKEN_TTL_SECONDS?: string;
   CODE_TTL_SECONDS?: string;
@@ -28,6 +29,8 @@ function toInt(v: string | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 function config(env: Env) {
+  const domainConfig = env.ALLOWED_EMAIL_DOMAINS || env.ALLOWED_EMAIL_DOMAIN;
+  const domains = required(domainConfig, "ALLOWED_EMAIL_DOMAINS").split(",").map((x) => x.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
   return {
     issuer: required(env.OIDC_ISSUER, "OIDC_ISSUER").replace(/\/$/, ""),
     clientId: required(env.OIDC_CLIENT_ID, "OIDC_CLIENT_ID"),
@@ -35,7 +38,7 @@ function config(env: Env) {
     privateJwk: env.OIDC_PRIVATE_JWK || "",
     inviteCode: required(env.INVITE_CODE, "INVITE_CODE"),
     redirects: required(env.ALLOWED_REDIRECT_URIS, "ALLOWED_REDIRECT_URIS").split(",").map((x) => x.trim()).filter(Boolean),
-    domain: required(env.ALLOWED_EMAIL_DOMAIN, "ALLOWED_EMAIL_DOMAIN").toLowerCase().replace(/^@/, ""),
+    domains: [...new Set(domains)],
     familyName: env.FAMILY_NAME || "Example",
     tokenTtl: toInt(env.TOKEN_TTL_SECONDS, 3600),
     codeTtl: toInt(env.CODE_TTL_SECONDS, 300),
@@ -101,15 +104,25 @@ function validateInviteForEmail(env: Env, email: string, inviteCode: string): st
   return undefined;
 }
 
+function allowedDomainsText(env: Env): string {
+  return config(env).domains.map((domain) => `@${domain}`).join(", ");
+}
+
+function emailDomainAllowed(env: Env, email: string): boolean {
+  return config(env).domains.some((domain) => email.endsWith(`@${domain}`));
+}
+
 function claims(env: Env, email: string): Claims {
   const local = email.split("@", 1)[0];
   return { sub: email, email, email_verified: true, given_name: local, family_name: config(env).familyName, name: local, preferred_username: local };
 }
 function loginPage(env: Env, params: Record<string, string>, error = ""): Response {
   const c = config(env);
+  const domains = allowedDomainsText(env);
+  const placeholderDomain = c.domains[0];
   const hidden = Object.entries(params).map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join("");
   const err = error ? `<div class="err">${esc(error)}</div>` : "";
-  return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChatGPT SSO</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0f172a;color:#e5e7eb;display:grid;place-items:center;min-height:100vh;margin:0}.card{width:min(92vw,420px);background:#111827;border:1px solid #334155;border-radius:18px;padding:28px;box-shadow:0 20px 60px #0008}h1{margin:0 0 8px;font-size:26px}p{color:#94a3b8}label{display:block;margin:16px 0 6px;color:#cbd5e1}input{box-sizing:border-box;width:100%;padding:12px 14px;border-radius:10px;border:1px solid #475569;background:#020617;color:#fff;font-size:16px}button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:10px;background:#10a37f;color:white;font-weight:700;font-size:16px;cursor:pointer}.err{background:#7f1d1d;color:#fecaca;padding:10px;border-radius:10px;margin:12px 0}small{color:#64748b}</style></head><body><main class="card"><h1>ChatGPT SSO</h1><p>输入 @${esc(c.domain)} 邮箱和邀请码登录。</p>${err}<form method="post" action="/authorize">${hidden}<label>Email</label><input name="email" type="email" placeholder="you@${esc(c.domain)}" required autofocus><label>Invite code</label><input name="invite_code" type="password" required><button type="submit">Continue to ChatGPT</button></form><p><small>No account registration required.</small></p></main></body></html>`);
+  return html(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChatGPT SSO</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0f172a;color:#e5e7eb;display:grid;place-items:center;min-height:100vh;margin:0}.card{width:min(92vw,420px);background:#111827;border:1px solid #334155;border-radius:18px;padding:28px;box-shadow:0 20px 60px #0008}h1{margin:0 0 8px;font-size:26px}p{color:#94a3b8}label{display:block;margin:16px 0 6px;color:#cbd5e1}input{box-sizing:border-box;width:100%;padding:12px 14px;border-radius:10px;border:1px solid #475569;background:#020617;color:#fff;font-size:16px}button{width:100%;margin-top:22px;padding:12px;border:0;border-radius:10px;background:#10a37f;color:white;font-weight:700;font-size:16px;cursor:pointer}.err{background:#7f1d1d;color:#fecaca;padding:10px;border-radius:10px;margin:12px 0}small{color:#64748b}</style></head><body><main class="card"><h1>ChatGPT SSO</h1><p>输入 ${esc(domains)} 邮箱和邀请码登录。</p>${err}<form method="post" action="/authorize">${hidden}<label>Email</label><input name="email" type="email" placeholder="you@${esc(placeholderDomain)}" required autofocus><label>Invite code</label><input name="invite_code" type="password" required><button type="submit">Continue to ChatGPT</button></form><p><small>No account registration required.</small></p></main></body></html>`);
 }
 type JwkWithKid = JsonWebKey & { kid?: string };
 
@@ -195,7 +208,7 @@ export default {
         const c = config(env);
         const keep = { client_id: params.client_id || "", redirect_uri: params.redirect_uri || "", response_type: params.response_type || "", scope: params.scope || "", state: params.state || "", nonce: params.nonce || "" };
         const email = (params.email || "").trim().toLowerCase();
-        if (!email.endsWith(`@${c.domain}`)) return loginPage(env, keep, `邮箱必须是 @${c.domain}`);
+        if (!emailDomainAllowed(env, email)) return loginPage(env, keep, `邮箱必须是以下域名之一 / Email must use one of: ${allowedDomainsText(env)}`);
         const inviteError = validateInviteForEmail(env, email, params.invite_code || "");
         if (inviteError) return loginPage(env, keep, inviteError);
         if (params.response_type !== "code") return json({ error: "unsupported_response_type" }, 400);
