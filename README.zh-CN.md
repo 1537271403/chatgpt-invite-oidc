@@ -1,39 +1,14 @@
 # ChatGPT Invite OIDC 中文部署文档
 
-这是一个给 ChatGPT / OpenAI SSO 使用的极简 OIDC Provider。
+这是一个给 ChatGPT / OpenAI SSO 使用的轻量 OIDC Provider。
 
-它不保存用户数据库，不需要注册账号。用户登录时只需要输入：
-
-```text
-邮箱 + 邀请码
-```
-
-服务会校验：
+当前推荐部署方式是：
 
 ```text
-邮箱必须属于允许的域名
-邀请码必须正确
+Cloudflare Workers + GitHub Actions + Workers KV
 ```
 
-然后把邮箱作为 OIDC claims 返回给 OpenAI / ChatGPT：
-
-```json
-{
-  "sub": "alice@example.com",
-  "email": "alice@example.com",
-  "email_verified": true,
-  "given_name": "alice",
-  "family_name": "Example"
-}
-```
-
-> 安全模型：知道邀请码，并且输入任意允许域名邮箱的人，就可以声明自己是这个邮箱。邀请码要足够长，泄露后及时轮换。
-
----
-
-## 推荐部署方式：Cloudflare Workers + GitHub Actions
-
-推荐用 Workers 版：
+特点：
 
 ```text
 不需要 VPS
@@ -42,26 +17,96 @@
 不需要 Certbot
 Cloudflare 自动 HTTPS
 GitHub Action 自动部署
-自动创建 / 复用 Workers KV
-自动写入 Worker Secrets
 JWT 签名私钥自动生成并保存到 KV
-```
-
-Workers 代码在：
-
-```text
-workers/
-```
-
-Action 文件在：
-
-```text
-.github/workflows/deploy-workers.yml
+多 Workspace 配置通过 /admin 后台维护
 ```
 
 ---
 
-## 1. 准备 Cloudflare API Token
+## 当前必需变量 / 密钥清单
+
+### GitHub Secrets 必需
+
+进入：
+
+```text
+Settings → Secrets and variables → Actions → Secrets
+```
+
+保留 / 新增：
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+ADMIN_PASSWORD
+```
+
+说明：
+
+```text
+CLOUDFLARE_API_TOKEN  = GitHub Actions 部署 Worker 用
+CLOUDFLARE_ACCOUNT_ID = GitHub Actions 部署 Worker 用
+ADMIN_PASSWORD        = 登录 /admin 管理后台用
+```
+
+生成 `ADMIN_PASSWORD`：
+
+```bash
+openssl rand -hex 32
+```
+
+### GitHub Variables 必需
+
+进入：
+
+```text
+Settings → Secrets and variables → Actions → Variables
+```
+
+保留 / 新增：
+
+```text
+CF_WORKER_NAME=chatgpt-invite-oidc
+CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
+OIDC_ISSUER=https://sso.example.com
+```
+
+`OIDC_ISSUER` 要换成你的 OIDC 域名，例如：
+
+```text
+OIDC_ISSUER=https://sso.acidtech.asia
+```
+
+### GitHub Variables 可选
+
+没有设置时会使用默认值：
+
+```text
+TOKEN_TTL_SECONDS=3600
+CODE_TTL_SECONDS=300
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_MAX_ATTEMPTS=10
+```
+
+### 可以删除的旧配置
+
+这些已经迁移到 `/admin` 后台维护，不再需要作为 GitHub Secrets / Variables 存在：
+
+```text
+OIDC_CLIENT_ID
+OIDC_CLIENT_SECRET
+INVITE_CODE
+ALLOWED_REDIRECT_URIS
+ALLOWED_EMAIL_DOMAINS
+ALLOWED_EMAIL_DOMAIN
+FAMILY_NAME
+ADMIN_EMAILS
+ADMIN_INVITE_CODE
+```
+
+---
+
+## Cloudflare API Token 权限
 
 进入 Cloudflare：
 
@@ -79,131 +124,15 @@ Zone → Zone → Read
 Zone → Workers Routes → Edit
 ```
 
-资源范围：
+还需要 Cloudflare Account ID：
 
 ```text
-Account Resources: 你的账号
-Zone Resources: 你的域名
-```
-
-同时找到 Cloudflare Account ID：
-
-```text
-Cloudflare Dashboard → 右侧 Account ID
+Cloudflare Dashboard → Account ID
 ```
 
 ---
 
-## 2. 准备 OpenAI Callback URL
-
-OpenAI / ChatGPT SSO 后台会给一个 Callback URL，类似：
-
-```text
-https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
-```
-
-这个值后面要填到 GitHub Variables：
-
-```text
-ALLOWED_REDIRECT_URIS
-```
-
-必须一字不差。
-
----
-
-## 3. 生成 Client Secret 和邀请码
-
-执行：
-
-```bash
-openssl rand -hex 32
-openssl rand -hex 32
-```
-
-建议：
-
-```text
-第一条 → OIDC_CLIENT_SECRET
-第二条 → INVITE_CODE
-```
-
-说明：
-
-```text
-OIDC_CLIENT_SECRET = OpenAI 后台填写的 Client Secret
-INVITE_CODE        = 用户登录页面输入的邀请码
-```
-
----
-
-## 4. 配置 GitHub Secrets
-
-进入 GitHub 仓库：
-
-```text
-Settings → Secrets and variables → Actions → Secrets
-```
-
-添加：
-
-```text
-CLOUDFLARE_API_TOKEN
-CLOUDFLARE_ACCOUNT_ID
-OIDC_CLIENT_SECRET
-INVITE_CODE
-```
-
-不需要添加：
-
-```text
-OIDC_PRIVATE_JWK
-```
-
-Worker 会第一次访问时自动生成 JWT 签名私钥，并持久化到 Workers KV。
-
----
-
-## 5. 配置 GitHub Variables
-
-进入：
-
-```text
-Settings → Secrets and variables → Actions → Variables
-```
-
-添加：
-
-```text
-CF_WORKER_NAME=chatgpt-invite-oidc
-CF_KV_NAMESPACE_TITLE=chatgpt-invite-oidc-kv
-OIDC_ISSUER=https://sso.example.com
-OIDC_CLIENT_ID=chatgpt-sso
-ALLOWED_REDIRECT_URIS=https://external.auth.openai.com/sso/oidc/YOUR_CONNECTION_ID/callback
-ALLOWED_EMAIL_DOMAIN=example.com
-FAMILY_NAME=Example
-```
-
-示例：如果你的域名是 `sso.acidtech.asia`，邮箱域名是 `acidtech.asia`：
-
-```text
-OIDC_ISSUER=https://sso.acidtech.asia
-ALLOWED_EMAIL_DOMAIN=acidtech.asia
-FAMILY_NAME=AcidTech
-```
-
-可选 Variables：
-
-```text
-TOKEN_TTL_SECONDS=3600
-CODE_TTL_SECONDS=300
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_MAX_ATTEMPTS=10
-```
-
----
-
-## 6. 运行 GitHub Action
+## 运行 GitHub Action
 
 进入：
 
@@ -211,7 +140,7 @@ RATE_LIMIT_MAX_ATTEMPTS=10
 Actions → Deploy Cloudflare Workers → Run workflow
 ```
 
-Action 会自动执行：
+Action 会自动：
 
 ```text
 npm ci
@@ -222,13 +151,13 @@ npm run check
 写入 Worker Secrets
 ```
 
-以后只要 push 到 `main` 并修改了 `workers/**`，也会自动部署。
+以后 push 到 `main` 且修改 `workers/**` 时，也会自动部署。
 
 ---
 
-## 7. 绑定自定义域名
+## 绑定自定义域名
 
-进入 Cloudflare：
+Cloudflare：
 
 ```text
 Workers & Pages
@@ -239,15 +168,10 @@ Workers & Pages
 → Custom Domain
 ```
 
-填写：
+填写你的 SSO 域名，例如：
 
 ```text
 sso.example.com
-```
-
-例如：
-
-```text
 sso.acidtech.asia
 ```
 
@@ -255,9 +179,7 @@ Cloudflare 会自动处理 HTTPS。
 
 ---
 
-## 8. 验证接口
-
-等待 1～3 分钟后访问：
+## 验证接口
 
 ```bash
 curl https://sso.example.com/healthz
@@ -265,89 +187,110 @@ curl https://sso.example.com/.well-known/openid-configuration
 curl https://sso.example.com/jwks
 ```
 
-正常结果：
+正常：
 
 ```json
 {"ok":true}
 ```
 
-Discovery 里应包含：
-
-```json
-{
-  "issuer": "https://sso.example.com",
-  "authorization_endpoint": "https://sso.example.com/authorize",
-  "token_endpoint": "https://sso.example.com/token",
-  "jwks_uri": "https://sso.example.com/jwks"
-}
-```
-
-JWKS 应包含：
-
-```json
-{
-  "keys": [
-    {
-      "kty": "RSA",
-      "alg": "RS256",
-      "n": "...",
-      "e": "AQAB",
-      "kid": "main",
-      "use": "sig"
-    }
-  ]
-}
-```
-
----
-
-## 9. OpenAI / ChatGPT SSO 配置
-
-OpenAI 后台填写：
+OpenAI Discovery Endpoint：
 
 ```text
-Client ID:
-chatgpt-sso
-```
-
-```text
-Client Secret:
-GitHub Secret 里的 OIDC_CLIENT_SECRET
-```
-
-```text
-Discovery Endpoint:
 https://sso.example.com/.well-known/openid-configuration
 ```
 
-Scopes：
+---
+
+## 管理后台
+
+部署后打开：
 
 ```text
-openid email profile
+https://sso.example.com/admin
 ```
 
-对应关系：
+浏览器会弹出 Basic Auth：
 
 ```text
-OpenAI Client ID     = GitHub Variable OIDC_CLIENT_ID
-OpenAI Client Secret = GitHub Secret OIDC_CLIENT_SECRET
-Discovery Endpoint   = OIDC_ISSUER + /.well-known/openid-configuration
+Username: 任意值
+Password: ADMIN_PASSWORD
+```
+
+在后台为每个 ChatGPT workspace 新增一条 Workspace。
+
+每条 Workspace 可以独立配置：
+
+```text
+Name
+Client ID
+Client Secret
+Invite Code
+Allowed Email Domains
+Redirect / Callback / Fallback URLs
+Family Name
+Enabled
+```
+
+多个 workspace 不会串配置；认证时会按：
+
+```text
+client_id + redirect_uri
+```
+
+匹配对应 Workspace。
+
+---
+
+## OpenAI / ChatGPT SSO 配置
+
+在 OpenAI / ChatGPT 对应 workspace 的 SSO 页面填写：
+
+```text
+Client ID: /admin 后台里该 Workspace 的 Client ID
+Client Secret: /admin 后台里该 Workspace 的 Client Secret
+Discovery Endpoint: https://sso.example.com/.well-known/openid-configuration
+Scopes: openid email profile
+```
+
+OpenAI 给出的 callback / fallback URL 必须完整加入该 Workspace 的：
+
+```text
+Redirect / Callback / Fallback URLs
+```
+
+如果有多个 ChatGPT workspace，就在 `/admin` 里建多条 Workspace，每条分别填自己的：
+
+```text
+Client ID
+Client Secret
+允许邮箱域名
+callback / fallback URLs
+邀请码
+名称
 ```
 
 ---
 
-## 10. 登录流程
+## 登录流程
 
 用户在 ChatGPT 选择 SSO 后，会跳到 Worker 登录页。
 
 输入：
 
 ```text
-邮箱：alice@example.com
-邀请码：INVITE_CODE
+邮箱
+邀请码
 ```
 
-服务返回：
+Worker 会检查：
+
+```text
+邮箱域名是否属于该 Workspace 的 Allowed Email Domains
+邀请码是否等于该 Workspace 的 Invite Code
+redirect_uri 是否属于该 Workspace 的 Redirect / Callback / Fallback URLs
+```
+
+通过后返回 OIDC claims，例如：
 
 ```json
 {
@@ -363,47 +306,52 @@ ChatGPT / OpenAI 根据 `email/sub` 识别账号。
 
 ---
 
-# 常见问题
+## 常见问题
 
-## invalid_client_id
+### invalid_client_id
 
 原因：
 
 ```text
-OpenAI Client ID 和 OIDC_CLIENT_ID 不一致
+OpenAI 填写的 Client ID 不存在于 /admin 后台任何已启用 Workspace
 ```
 
 修复：
 
 ```text
-OpenAI Client ID = GitHub Variable OIDC_CLIENT_ID
+检查 /admin 后台对应 Workspace 的 Client ID
+检查 Workspace 是否 Enabled
 ```
 
-默认：
-
-```text
-chatgpt-sso
-```
-
----
-
-## invalid_redirect_uri
+### invalid_redirect_uri
 
 原因：
 
 ```text
-OpenAI callback URL 和 ALLOWED_REDIRECT_URIS 不一致
+OpenAI callback/fallback URL 没有加入该 Workspace 的 Redirect / Callback / Fallback URLs
 ```
 
 修复：
 
 ```text
-ALLOWED_REDIRECT_URIS 必须完整等于 OpenAI 给的 callback URL
+把 OpenAI 给出的 callback/fallback URL 原样加入 /admin 对应 Workspace
 ```
 
----
+### invalid_client
 
-## Discovery endpoint unreachable
+原因：
+
+```text
+OpenAI 填写的 Client Secret 和 /admin 后台该 Workspace 的 Client Secret 不一致
+```
+
+修复：
+
+```text
+同步修改 OpenAI 后台和 /admin 后台的 Client Secret
+```
+
+### Discovery endpoint unreachable
 
 检查：
 
@@ -420,97 +368,45 @@ Cloudflare Custom Domain 没配置
 OIDC_ISSUER 填错
 ```
 
+### 修改 Workspace 后没生效
+
+Workspace 数据保存在 Workers KV。通常保存后会立即用于后续登录；如果 OpenAI 页面仍旧失败，优先检查：
+
+```text
+Client ID
+Client Secret
+Redirect / Callback / Fallback URLs
+Allowed Email Domains
+Workspace Enabled 状态
+```
+
 ---
 
-## jwks_uri unreachable or invalid
+## 本地 Wrangler 部署，可选
 
-检查：
+一般不需要。如果不用 GitHub Actions，可以手动：
 
 ```bash
-curl https://你的域名/jwks
+cd workers
+npm install
+cp wrangler.example.toml wrangler.toml
+npx wrangler login
+npx wrangler kv namespace create OIDC_KV
+npm run check
+npx wrangler secret put ADMIN_PASSWORD
+npx wrangler deploy
 ```
 
-必须返回：
-
-```json
-{"keys":[...]}
-```
-
-并且 key 包含：
-
-```text
-kty
-n
-e
-kid
-use
-alg
-```
+手动部署时需要把 KV namespace id 填入 `wrangler.toml`。
 
 ---
 
-## 修改变量后没生效
+## Docker Compose 部署
 
-修改 GitHub Secrets / Variables 后，需要重新运行：
+如果不用 Cloudflare Workers，也可以用 Docker Compose 部署 FastAPI 版本。FastAPI 版本仍是传统单服务配置，主要参考英文 README 的 Docker 部分。
 
-```text
-Actions → Deploy Cloudflare Workers → Run workflow
-```
-
----
-
-## 换邀请码
-
-修改 GitHub Secret：
+但当前推荐优先使用：
 
 ```text
-INVITE_CODE
+Cloudflare Workers + /admin 多 Workspace 管理后台
 ```
-
-然后重新 Run workflow。
-
----
-
-## 换 Client Secret
-
-修改 GitHub Secret：
-
-```text
-OIDC_CLIENT_SECRET
-```
-
-同时 OpenAI 后台的 Client Secret 也要改成同一串，然后重新 Run workflow。
-
----
-
-# Docker Compose 部署
-
-如果不用 Cloudflare Workers，也可以用 Docker Compose 部署。参考英文 README 的 Docker 部分：
-
-```bash
-git clone https://github.com/YOUR_USER/chatgpt-invite-oidc.git
-cd chatgpt-invite-oidc
-cp .env.example .env
-nano .env
-docker compose up -d --build
-```
-
-但推荐优先使用 Cloudflare Workers + GitHub Actions。
-
-## 管理账号独立邀请码
-
-如果需要防止普通邀请码登录管理邮箱，可以新增 GitHub Secrets：
-
-```text
-ADMIN_EMAILS=admin@example.com,owner@example.com
-ADMIN_INVITE_CODE=另一条更长的邀请码
-```
-
-逻辑：
-
-```text
-ADMIN_EMAILS 里的邮箱只能使用 ADMIN_INVITE_CODE 登录
-其他允许域名邮箱继续使用普通 INVITE_CODE 登录
-```
-
-注意：如果删除了 GitHub Variables 后手动 Run workflow，Action 会在部署前检查 `OIDC_ISSUER`、`ALLOWED_REDIRECT_URIS`、`ALLOWED_EMAIL_DOMAIN`。缺失时会直接失败，不会把 Cloudflare Worker 部署成空配置。
